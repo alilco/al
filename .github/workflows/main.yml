@@ -44,42 +44,33 @@ jobs:
       
       - name: إعداد Android SDK
         run: |
-          # إنشاء المجلدات المطلوبة
           mkdir -p $HOME/android-sdk/cmdline-tools
           
-          # تحميل Android Command Line Tools
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
           unzip -q commandlinetools-linux-9477386_latest.zip
           
-          # نقله للمسار الصحيح
           mv cmdline-tools $HOME/android-sdk/cmdline-tools/latest
           
-          # إعداد المتغيرات
           export ANDROID_HOME=$HOME/android-sdk
           export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
           
-          # قبول التراخيص وتثبيت المكونات
           yes | sdkmanager --sdk_root=$ANDROID_HOME --licenses > /dev/null 2>&1 || true
           sdkmanager --sdk_root=$ANDROID_HOME "platform-tools" "platforms;android-33" "build-tools;33.0.0"
       
       - name: إنشاء مشروع أندرويد
         run: |
-          # إنشاء هيكل المشروع
           mkdir -p MyApp/app/src/main/assets
           mkdir -p MyApp/app/src/main/res/values
           mkdir -p MyApp/app/src/main/res/drawable
           mkdir -p MyApp/app/src/main/java/com/password/generator
           
-          # نسخ ملفات الويب
           cp -r project/dist/* MyApp/app/src/main/assets/
           
-          # إنشاء AndroidManifest.xml
+          # AndroidManifest.xml
           cat > MyApp/app/src/main/AndroidManifest.xml << 'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              
               <uses-permission android:name="android.permission.INTERNET" />
-              
               <application
                   android:allowBackup="true"
                   android:icon="@drawable/ic_launcher"
@@ -98,7 +89,7 @@ jobs:
           </manifest>
           EOF
           
-          # إنشاء MainActivity.java
+          # MainActivity.java
           cat > MyApp/app/src/main/java/com/password/generator/MainActivity.java << 'EOF'
           package com.password.generator;
           
@@ -126,22 +117,40 @@ jobs:
           }
           EOF
           
-          # إنشاء build.gradle للمشروع
-          cat > MyApp/build.gradle << 'EOF'
-          buildscript {
+          # ========== ملفات Gradle حديثة ==========
+          
+          # settings.gradle
+          cat > MyApp/settings.gradle << 'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
               repositories {
                   google()
                   mavenCentral()
               }
-              dependencies {
-                  classpath 'com.android.tools.build:gradle:8.1.0'
-              }
+          }
+          rootProject.name = "PasswordGenerator"
+          include ':app'
+          EOF
+          
+          # build.gradle (المشروع)
+          cat > MyApp/build.gradle << 'EOF'
+          plugins {
+              id 'com.android.application' version '8.1.0' apply false
           }
           EOF
           
-          # إنشاء build.gradle للتطبيق
+          # build.gradle (التطبيق)
           cat > MyApp/app/build.gradle << 'EOF'
-          apply plugin: 'com.android.application'
+          plugins {
+              id 'com.android.application'
+          }
           
           android {
               namespace 'com.password.generator'
@@ -167,26 +176,13 @@ jobs:
           }
           EOF
           
-          # إنشاء settings.gradle
-          cat > MyApp/settings.gradle << 'EOF'
-          pluginManagement {
-              repositories {
-                  google()
-                  mavenCentral()
-                  gradlePluginPortal()
-              }
-          }
-          rootProject.name = "PasswordGenerator"
-          include ':app'
-          EOF
-          
-          # إنشاء gradle.properties
+          # gradle.properties
           cat > MyApp/gradle.properties << 'EOF'
           android.useAndroidX=true
           org.gradle.jvmargs=-Xmx2048m
           EOF
           
-          # إنشاء local.properties مع مسار SDK الصحيح
+          # local.properties مع مسار SDK الصحيح
           echo "sdk.dir=$HOME/android-sdk" > MyApp/local.properties
       
       - name: إنشاء أيقونة
@@ -197,7 +193,6 @@ jobs:
             -gravity center -annotate 0 "🔐" \
             MyApp/app/src/main/res/drawable/ic_launcher.png
           
-          # إنشاء strings.xml
           cat > MyApp/app/src/main/res/values/strings.xml << 'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <resources>
@@ -210,13 +205,13 @@ jobs:
           cd MyApp
           export ANDROID_HOME=$HOME/android-sdk
           
-          # تحميل Gradle Wrapper
+          # استخدام Gradle wrapper بإصدار 8.2
           gradle wrapper --gradle-version 8.2
           
           # بناء APK
           ./gradlew assembleRelease
           
-          # البحث عن ملف APK ونسخه
+          # نسخ APK
           find . -name "*.apk" -type f
           cp app/build/outputs/apk/release/app-release-unsigned.apk ../password-generator.apk 2>/dev/null || \
           cp $(find . -name "*.apk" -type f | head -1) ../password-generator.apk
