@@ -44,14 +44,14 @@ jobs:
       uses: actions/setup-java@v4
       with:
         java-version: '17'
-        distribution: 'zulu' # تم التغيير لـ zulu لثباتها الأعلى مع Capacitor أندرويد
+        distribution: 'temurin'
 
-    # خطوة حاسمة لإعطاء صلاحيات البناء للأندرويد وتجنب قفل المكاتب
-    - name: Configure Gradle Properties
+    # خطوة حاسمة: تغيير إصدار الـ Gradle ليتوافق تماماً مع JDK 17 ويمنع خطأ الـ Jar
+    - name: Downgrade Gradle for Compatibility
       run: |
-        mkdir -p ~/.gradle
-        echo "org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m" >> ~/.gradle/gradle.properties
-        chmod +x android/gradlew
+        cd android
+        sed -i 's/gradle-8.2.1-all.zip/gradle-8.0-all.zip/g' gradle/wrapper/gradle-wrapper.properties
+        chmod +x gradlew
 
     - name: Build APK (Gradle)
       run: |
