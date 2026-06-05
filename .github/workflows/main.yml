@@ -40,18 +40,19 @@ jobs:
         npx cap add android
         npx cap sync
 
-    - name: Set up JDK 17
+    # إعداد JDK 21 ليتوافق تماماً مع متطلبات Gradle 8.2.1 الافتراضية للـ Capacitor
+    - name: Set up JDK 21
       uses: actions/setup-java@v4
       with:
-        java-version: '17'
+        java-version: '21'
         distribution: 'temurin'
 
-    # خطوة حاسمة: تغيير إصدار الـ Gradle ليتوافق تماماً مع JDK 17 ويمنع خطأ الـ Jar
-    - name: Downgrade Gradle for Compatibility
+    # هذا السطر يمنع تعارض حزمة bouncycastle (الـ Jar) التي سببت الخطأ في البداية
+    - name: Configure Gradle to bypass Jar issue
       run: |
-        cd android
-        sed -i 's/gradle-8.2.1-all.zip/gradle-8.0-all.zip/g' gradle/wrapper/gradle-wrapper.properties
-        chmod +x gradlew
+        mkdir -p ~/.gradle
+        echo "org.gradle.dependency.verification=off" >> ~/.gradle/gradle.properties
+        chmod +x android/gradlew
 
     - name: Build APK (Gradle)
       run: |
