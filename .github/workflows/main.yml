@@ -42,13 +42,11 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
       
-      - name: إعداد Android SDK
+      - name: تثبيت Android Build Tools
         run: |
           mkdir -p $HOME/android-sdk/cmdline-tools
-          
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
           unzip -q commandlinetools-linux-9477386_latest.zip
-          
           mv cmdline-tools $HOME/android-sdk/cmdline-tools/latest
           
           export ANDROID_HOME=$HOME/android-sdk
@@ -56,28 +54,26 @@ jobs:
           
           yes | sdkmanager --sdk_root=$ANDROID_HOME --licenses > /dev/null 2>&1 || true
           sdkmanager --sdk_root=$ANDROID_HOME "platform-tools" "platforms;android-33" "build-tools;33.0.0"
+          
+          echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
+          echo "$HOME/android-sdk/build-tools/33.0.0" >> $GITHUB_PATH
+          echo "$HOME/android-sdk/platform-tools" >> $GITHUB_PATH
       
-      - name: إنشاء مشروع أندرويد
+      - name: إنشاء ملفات المشروع
         run: |
-          mkdir -p MyApp/app/src/main/assets
-          mkdir -p MyApp/app/src/main/res/values
-          mkdir -p MyApp/app/src/main/res/drawable
-          mkdir -p MyApp/app/src/main/java/com/password/generator
+          mkdir -p MyApp/res/values
           
-          cp -r project/dist/* MyApp/app/src/main/assets/
-          
-          # AndroidManifest.xml
-          cat > MyApp/app/src/main/AndroidManifest.xml << 'EOF'
+          cat > MyApp/AndroidManifest.xml << 'EOF'
           <?xml version="1.0" encoding="utf-8"?>
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+              package="com.password.generator">
               <uses-permission android:name="android.permission.INTERNET" />
               <application
                   android:allowBackup="true"
-                  android:icon="@drawable/ic_launcher"
                   android:label="Password Generator"
                   android:usesCleartextTraffic="true">
                   <activity
-                      android:name=".MainActivity"
+                      android:name="com.password.generator.MainActivity"
                       android:exported="true"
                       android:configChanges="orientation|screenSize">
                       <intent-filter>
@@ -89,8 +85,14 @@ jobs:
           </manifest>
           EOF
           
-          # MainActivity.java
-          cat > MyApp/app/src/main/java/com/password/generator/MainActivity.java << 'EOF'
+          cat > MyApp/res/values/strings.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <string name="app_name">Password Generator</string>
+          </resources>
+          EOF
+          
+          cat > MyApp/MainActivity.java << 'EOF'
           package com.password.generator;
           
           import android.app.Activity;
@@ -116,105 +118,60 @@ jobs:
               }
           }
           EOF
-          
-          # ========== ملفات Gradle حديثة ==========
-          
-          # settings.gradle
-          cat > MyApp/settings.gradle << 'EOF'
-          pluginManagement {
-              repositories {
-                  google()
-                  mavenCentral()
-                  gradlePluginPortal()
-              }
-          }
-          dependencyResolutionManagement {
-              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-          }
-          rootProject.name = "PasswordGenerator"
-          include ':app'
-          EOF
-          
-          # build.gradle (المشروع)
-          cat > MyApp/build.gradle << 'EOF'
-          plugins {
-              id 'com.android.application' version '8.1.0' apply false
-          }
-          EOF
-          
-          # build.gradle (التطبيق)
-          cat > MyApp/app/build.gradle << 'EOF'
-          plugins {
-              id 'com.android.application'
-          }
-          
-          android {
-              namespace 'com.password.generator'
-              compileSdk 33
-              
-              defaultConfig {
-                  applicationId "com.password.generator"
-                  minSdk 21
-                  targetSdk 33
-                  versionCode 1
-                  versionName "1.0"
-              }
-              
-              buildTypes {
-                  release {
-                      minifyEnabled false
-                  }
-              }
-              compileOptions {
-                  sourceCompatibility JavaVersion.VERSION_1_8
-                  targetCompatibility JavaVersion.VERSION_1_8
-              }
-          }
-          EOF
-          
-          # gradle.properties
-          cat > MyApp/gradle.properties << 'EOF'
-          android.useAndroidX=true
-          org.gradle.jvmargs=-Xmx2048m
-          EOF
-          
-          # local.properties مع مسار SDK الصحيح
-          echo "sdk.dir=$HOME/android-sdk" > MyApp/local.properties
       
-      - name: إنشاء أيقونة
+      - name: بناء APK يدوياً (بدون Gradle)
         run: |
-          sudo apt-get install -y imagemagick
-          convert -size 512x512 xc:'#6C63FF' \
-            -fill white -pointsize 250 \
-            -gravity center -annotate 0 "🔐" \
-            MyApp/app/src/main/res/drawable/ic_launcher.png
+          BUILD_TOOLS=$HOME/android-sdk/build-tools/33.0.0
+          PLATFORM=$HOME/android-sdk/platforms/android-33
+          ASSETS_DIR=MyApp/assets
+          BUILD_DIR=MyApp/build
           
-          cat > MyApp/app/src/main/res/values/strings.xml << 'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <resources>
-              <string name="app_name">Password Generator</string>
-          </resources>
-          EOF
-      
-      - name: بناء APK
-        run: |
-          cd MyApp
-          export ANDROID_HOME=$HOME/android-sdk
+          mkdir -p $ASSETS_DIR $BUILD_DIR/classes $BUILD_DIR/apk
           
-          # استخدام Gradle wrapper بإصدار 8.2
-          gradle wrapper --gradle-version 8.2
+          cp -r project/dist/* $ASSETS_DIR/
+          echo "ملفات assets:"
+          ls -la $ASSETS_DIR/
           
-          # بناء APK
-          ./gradlew assembleRelease
+          # إنشاء R.java
+          mkdir -p $BUILD_DIR/gen
+          $BUILD_TOOLS/aapt package -f -m \
+            -J $BUILD_DIR/gen \
+            -M MyApp/AndroidManifest.xml \
+            -S MyApp/res \
+            -I $PLATFORM/android.jar \
+            -A $ASSETS_DIR \
+            --auto-add-overlay
           
-          # نسخ APK
-          find . -name "*.apk" -type f
-          cp app/build/outputs/apk/release/app-release-unsigned.apk ../password-generator.apk 2>/dev/null || \
-          cp $(find . -name "*.apk" -type f | head -1) ../password-generator.apk
+          # تجميع Java
+          javac -source 1.8 -target 1.8 \
+            -d $BUILD_DIR/classes \
+            -cp $PLATFORM/android.jar:$BUILD_DIR/gen \
+            MyApp/MainActivity.java \
+            $BUILD_DIR/gen/com/password/generator/R.java
+          
+          # تحويل إلى dex
+          $BUILD_TOOLS/d8 \
+            --lib $PLATFORM/android.jar \
+            --output $BUILD_DIR/apk \
+            $BUILD_DIR/classes/com/password/generator/*.class
+          
+          # تجميع APK
+          $BUILD_TOOLS/aapt package -f -m \
+            -F $BUILD_DIR/app-unsigned.apk \
+            -M MyApp/AndroidManifest.xml \
+            -S MyApp/res \
+            -I $PLATFORM/android.jar \
+            -A $ASSETS_DIR \
+            --auto-add-overlay
+          
+          # إضافة classes.dex
+          cd $BUILD_DIR/apk
+          zip -r ../app-unsigned.apk classes.dex
+          cd ../../..
+          
+          cp $BUILD_DIR/app-unsigned.apk password-generator.apk
+          echo "✅ APK جاهز:"
+          ls -lh password-generator.apk
       
       - name: رفع APK للتحميل
         uses: actions/upload-artifact@v4
