@@ -40,10 +40,11 @@ jobs:
         npx cap add android
         npx cap sync
 
-    - name: Set up JDK 17
+    # تم تحديث الإصدار هنا إلى 21 لحل مشكلة الـ Gradle والـ Jar
+    - name: Set up JDK 21
       uses: actions/setup-java@v4
       with:
-        java-version: '17'
+        java-version: '21'
         distribution: 'temurin'
 
     - name: Build APK (Gradle)
