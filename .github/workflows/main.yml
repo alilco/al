@@ -40,17 +40,23 @@ jobs:
         npx cap add android
         npx cap sync
 
-    # تم تحديث الإصدار هنا إلى 21 لحل مشكلة الـ Gradle والـ Jar
-    - name: Set up JDK 21
+    - name: Set up JDK 17
       uses: actions/setup-java@v4
       with:
-        java-version: '21'
-        distribution: 'temurin'
+        java-version: '17'
+        distribution: 'zulu' # تم التغيير لـ zulu لثباتها الأعلى مع Capacitor أندرويد
+
+    # خطوة حاسمة لإعطاء صلاحيات البناء للأندرويد وتجنب قفل المكاتب
+    - name: Configure Gradle Properties
+      run: |
+        mkdir -p ~/.gradle
+        echo "org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m" >> ~/.gradle/gradle.properties
+        chmod +x android/gradlew
 
     - name: Build APK (Gradle)
       run: |
         cd android
-        ./gradlew assembleRelease
+        ./gradlew assembleRelease --no-daemon
 
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
