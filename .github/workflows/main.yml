@@ -1,0 +1,58 @@
+name: Build Web App to Android APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Unzip project files
+      run: |
+        unzip -o password-generator-with-login.zip -d .
+        if [ -d "password-generator-with-login" ]; then
+          mv password-generator-with-login/* .
+        elif [ -d "password-generator-master" ]; then
+          mv password-generator-master/* .
+        fi
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: 18
+
+    - name: Install dependencies
+      run: npm install
+
+    - name: Build Web Project
+      run: npm run build
+
+    - name: Install Capacitor & Configure Android
+      run: |
+        npm install @capacitor/core @capacitor/cli
+        npx cap init "Password Generator" "com.aliessam.passwordgenerator" --web-dir=dist
+        npm install @capacitor/android
+        npx cap add android
+        npx cap sync
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v3
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    - name: Build APK (Gradle)
+      run: |
+        cd android
+        ./gradlew assembleRelease
+
+    - name: Upload APK Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: Password-Generator-APK
+        path: android/app/build/outputs/apk/release/app-release-unsigned.apk
