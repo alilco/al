@@ -16,14 +16,13 @@ jobs:
       - name: فك ضغط المشروع
         run: |
           unzip "password-generator-with-login.zip" -d project/
+          echo "محتوى المشروع:"
           ls -la project/
       
       - name: إعداد Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: 'project/package-lock.json'
       
       - name: تثبيت الاعتماديات
         run: |
@@ -34,35 +33,183 @@ jobs:
         run: |
           cd project
           npm run build
+          echo "محتوى مجلد dist:"
           ls -la dist/
       
-      - name: تجهير ملفات APK
-        run: |
-          mkdir -p app/src/main/assets
-          cp -r project/dist/* app/src/main/assets/
-          ls -la app/src/main/assets/
+      - name: إعداد Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
       
-      - name: توليد أيقونة افتراضية
+      - name: تثبيت Android SDK
         run: |
-          mkdir -p app/src/main/res/drawable
-          # إنشاء أيقونة بسيطة بلون بنفسجي (مناسبة لمولد كلمات المرور)
+          sudo apt-get update
+          sudo apt-get install -y wget unzip
+          
+          # تحميل Android Command Line Tools
+          wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
+          unzip commandlinetools-linux-9477386_latest.zip -d android-sdk
+          mkdir -p android-sdk/latest
+          mv android-sdk/cmdline-tools/* android-sdk/latest/
+          
+          export ANDROID_HOME=$PWD/android-sdk
+          export PATH=$ANDROID_HOME/latest/bin:$PATH
+          
+          yes | sdkmanager --licenses
+          sdkmanager "platform-tools" "platforms;android-33" "build-tools;33.0.0"
+      
+      - name: إنشاء مشروع أندرويد
+        run: |
+          # إنشاء هيكل المشروع
+          mkdir -p MyApp/app/src/main/assets
+          mkdir -p MyApp/app/src/main/res/values
+          mkdir -p MyApp/app/src/main/res/drawable
+          
+          # نسخ ملفات الويب
+          cp -r project/dist/* MyApp/app/src/main/assets/
+          
+          # إنشاء AndroidManifest.xml
+          cat > MyApp/app/src/main/AndroidManifest.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+              package="com.password.generator">
+              
+              <uses-permission android:name="android.permission.INTERNET" />
+              
+              <application
+                  android:allowBackup="true"
+                  android:icon="@drawable/ic_launcher"
+                  android:label="Password Generator"
+                  android:usesCleartextTraffic="true">
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true"
+                      android:configChanges="orientation|screenSize">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+          
+          # إنشاء Activity
+          cat > MyApp/app/src/main/java/MainActivity.java << 'EOF'
+          package com.password.generator;
+          
+          import android.app.Activity;
+          import android.os.Bundle;
+          import android.webkit.WebView;
+          import android.webkit.WebViewClient;
+          import android.webkit.WebSettings;
+          
+          public class MainActivity extends Activity {
+              @Override
+              protected void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+                  
+                  WebView webView = new WebView(this);
+                  webView.setWebViewClient(new WebViewClient());
+                  WebSettings settings = webView.getSettings();
+                  settings.setJavaScriptEnabled(true);
+                  settings.setAllowFileAccess(true);
+                  settings.setDomStorageEnabled(true);
+                  
+                  webView.loadUrl("file:///android_asset/index.html");
+                  setContentView(webView);
+              }
+          }
+          EOF
+          
+          # إنشاء build.gradle
+          cat > MyApp/build.gradle << 'EOF'
+          buildscript {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+              dependencies {
+                  classpath 'com.android.tools.build:gradle:8.1.0'
+              }
+          }
+          
+          allprojects {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          EOF
+          
+          cat > MyApp/app/build.gradle << 'EOF'
+          apply plugin: 'com.android.application'
+          
+          android {
+              namespace 'com.password.generator'
+              compileSdk 33
+              
+              defaultConfig {
+                  applicationId "com.password.generator"
+                  minSdk 21
+                  targetSdk 33
+                  versionCode 1
+                  versionName "1.0"
+              }
+              
+              buildTypes {
+                  release {
+                      minifyEnabled false
+                  }
+              }
+          }
+          EOF
+          
+          # إنشاء settings.gradle
+          cat > MyApp/settings.gradle << 'EOF'
+          rootProject.name = "PasswordGenerator"
+          include ':app'
+          EOF
+          
+          # إنشاء gradle.properties
+          cat > MyApp/gradle.properties << 'EOF'
+          android.useAndroidX=true
+          EOF
+      
+      - name: إنشاء أيقونة
+        run: |
           sudo apt-get install -y imagemagick
           convert -size 512x512 xc:'#6C63FF' \
-            -fill white -font Helvetica -pointsize 200 \
+            -fill white -font Helvetica -pointsize 250 \
             -gravity center -annotate 0 "🔐" \
-            app/src/main/res/drawable/ic_launcher.png
+            MyApp/app/src/main/res/drawable/ic_launcher.png
+          
+          # إنشاء strings.xml
+          cat > MyApp/app/src/main/res/values/strings.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <string name="app_name">Password Generator</string>
+          </resources>
+          EOF
       
       - name: بناء APK
-        uses: ameer1234567890/Web-To-APK-Builder@latest
-        with:
-          app-name: "Password Generator"
-          package-name: "com.password.generator"
-          source-dir: "app/src/main/assets"
-          app-icon: "app/src/main/res/drawable/ic_launcher.png"
-          output-path: "password-generator.apk"
+        run: |
+          cd MyApp
+          export ANDROID_HOME=$PWD/../android-sdk
+          export PATH=$ANDROID_HOME/latest/bin:$ANDROID_HOME/build-tools/33.0.0:$PATH
+          
+          # تحميل Gradle Wrapper
+          gradle wrapper --gradle-version 8.2
+          
+          # بناء APK
+          ./gradlew assembleRelease
+          
+          # نسخ APK للمجلد الرئيسي
+          cp app/build/outputs/apk/release/app-release-unsigned.apk ../password-generator.apk
       
       - name: رفع APK للتحميل
         uses: actions/upload-artifact@v4
         with:
           name: Password-Generator-APK
-          path: "*.apk"
+          path: password-generator.apk
